@@ -151,8 +151,112 @@ $$\ddot{\psi} = -\left(\frac{2C_{\alpha f}l_f - 2C_{\alpha r}l_r}{I\dot{x}}\righ
 
 ## State Space Equations
 
+In order to implement the MPC controller, we need to organize the derived differential equations into the standard continuous-time state-space form: $\dot{x} = Ax + Bu$.
 
+1. Define the State and Input Vectors
+   
+   Based on our derivation, we track the lateral position, lateral velocity, heading angle, and yaw rate. These are our relevant states. 
+   * State Vector ($x$):
+     
+     $x = \begin{bmatrix} Y \\ \dot{y} \\ \psi \\ \dot{\psi} \end{bmatrix}$
+     
+   * Input Vector ($u$):
+     
+     $u = \delta$ (Steering angle)
+ 
 
+2. The State-Space Matrices
+   
+   Using the equations we derived for $\ddot{y}$ and $\ddot{\psi}$,
+   and from the kinematic relationships and small angle approximation, we get $\dot{Y} \approx v_x \psi + \dot{y}$ and $\dot{\psi} = \dot{\psi}$ (Fig. 6)
+
+<img width="480" height="464" alt="image" src="https://github.com/user-attachments/assets/44455a6a-73d4-4f44-ad5a-e3c4a301480d" />
+
+The System Matrix ($A$)  
+
+This matrix describes the internal dynamics of the vehicle (how the current state affects the rate of change of the state). This matrix constitutes the coeeficients of the states.  
+
+$$A = \begin{bmatrix} 
+0 & 1 & v_x & 0 \\
+0 & -\frac{2C_{\alpha f} + 2C_{\alpha r}}{m v_x} & 0 & -\left(v_x + \frac{2C_{\alpha f}l_f - 2C_{\alpha r}l_r}{m v_x}\right) \\
+0 & 0 & 0 & 1 \\
+0 & -\frac{2C_{\alpha f}l_f - 2C_{\alpha r}l_r}{I v_x} & 0 & -\frac{2C_{\alpha f}l_f^2 + 2C_{\alpha r}l_r^2}{I v_x}
+\end{bmatrix}$$  
+
+The Input Matrix ($B$)  
+
+This matrix describes how your steering command $\delta$ affects the system.  
+
+$$B = \begin{bmatrix} 
+0 \\
+\frac{2C_{\alpha f}}{m} \\
+0 \\
+\frac{2C_{\alpha f}l_f}{I}
+\end{bmatrix}$$  
+
+So, our final matrix:  
+
+$$\begin{bmatrix} \dot{Y} \\ \ddot{y} \\ \dot{\psi} \\ \ddot{\psi} \end{bmatrix} = \begin{bmatrix} 
+0 & 1 & v_x & 0 \\ 
+0 & -\frac{2C_{\alpha f} + 2C_{\alpha r}}{m v_x} & 0 & -\left(v_x + \frac{2C_{\alpha f}l_f - 2C_{\alpha r}l_r}{m v_x}\right) \\ 
+0 & 0 & 0 & 1 \\ 
+0 & -\frac{2C_{\alpha f}l_f - 2C_{\alpha r}l_r}{I v_x} & 0 & -\frac{2C_{\alpha f}l_f^2 + 2C_{\alpha r}l_r^2}{I v_x} 
+\end{bmatrix} \begin{bmatrix} Y \\ \dot{y} \\ \psi \\ \dot{\psi} \end{bmatrix} + \begin{bmatrix} 
+0 \\ 
+\frac{2C_{\alpha f}}{m} \\ 
+0 \\ 
+\frac{2C_{\alpha f}l_f}{I} 
+\end{bmatrix} \delta$$  
+
+To implement this model, the following parameters have to be defined:  
+
+* $Y$: Global lateral displacement (m).
+* $\dot{y}$: Local lateral velocity (m/s).
+* $\psi$: Heading/Yaw angle (rad).
+* $\dot{\psi}$: Yaw rate (rad/s).
+* $m$: Vehicle mass (kg).
+* $I$: Yaw moment of inertia ($kg \cdot m^2$).
+* $C_{\alpha f}, C_{\alpha r}$: Front/Rear cornering stiffness ($N/rad$).
+* $l_f, l_r$: Distance from C.G. to front/rear axles (m).
+* $v_x$: Constant longitudinal velocity (m/s).
+
+By substituting our vehicle parameters ($m, I, C_{\alpha}, l$), we obtain a linear model that predicts how steering inputs ($\delta$) influence lateral displacement and heading, allowing for optimal lane-change trajectory generation.
+
+Since computers operate in discrete steps, we have to discrete these matrices (Fig. 7). The simplest method is Euler discretization.  
+
+<img width="585" height="412" alt="image" src="https://github.com/user-attachments/assets/1e3346ab-8773-473f-9422-4a5dcbb8478f" />  
+Figure 7  
+
+The Euler method approximates the derivative $\dot{\mathbf{x}}$ using the difference between the current state and the next state over a small time step $dt$:  
+
+$$\dot{\mathbf{x}}(t) \approx \frac{\mathbf{x}(k+1) - \mathbf{x}(k)}{\Delta t}$$  
+
+Substituting this into your continuous equation $\dot{\mathbf{x}} = \mathbf{A}\mathbf{x} + \mathbf{B}\mathbf{u}$:  
+
+$$\frac{\mathbf{x}(k+1) - \mathbf{x}(k)}{\Delta t} = \mathbf{A}\mathbf{x}(k) + \mathbf{B}\mathbf{u}(k)$$  
+
+Solving for $\mathbf{x}(k+1)$:  
+
+$$\mathbf{x}(k+1) = (\mathbf{I} + \mathbf{A}\Delta t)\mathbf{x}(k) + (\mathbf{B}\Delta t)\mathbf{u}(k)$$ 
+
+So, with the new $\mathbf{A}_d$ and $\mathbf{B}_d$ matrices, where,  
+
+* Discrete System Matrix: $\mathbf{A}_d = \mathbf{I} + \mathbf{A}\Delta t$  
+* Discrete Input Matrix: $\mathbf{B}_d = \mathbf{B}\Delta t$
+
+our state-space matrix is rewritten as follows:  
+
+$$ \begin{bmatrix} Y \\ \dot{y} \\ \psi \\ \dot{\psi} \end{bmatrix}_{k+1} = \begin{bmatrix} 
+1 & \Delta t & v_x \Delta t & 0 \\ 
+0 & 1 - \frac{2C_{\alpha f} + 2C_{\alpha r}}{m v_x} \Delta t & 0 & -\left(v_x + \frac{2C_{\alpha f}l_f - 2C_{\alpha r}l_r}{m v_x}\right) \Delta t \\ 
+0 & 0 & 1 & \Delta t \\ 
+0 & -\frac{2C_{\alpha f}l_f - 2C_{\alpha r}l_r}{I v_x} \Delta t & 0 & 1 - \frac{2C_{\alpha f}l_f^2 + 2C_{\alpha r}l_r^2}{I v_x} \Delta t 
+\end{bmatrix} \begin{bmatrix} Y \\ \dot{y} \\ \psi \\ \dot{\psi} \end{bmatrix}_k + \begin{bmatrix} 
+0 \\ 
+\frac{2C_{\alpha f}}{m} \Delta t \\ 
+0 \\ 
+\frac{2C_{\alpha f}l_f}{I} \Delta t 
+\end{bmatrix} \delta_k $$  
 
 
 
