@@ -222,6 +222,8 @@ To implement this model, the following parameters have to be defined:
 
 By substituting our vehicle parameters ($m, I, C_{\alpha}, l$), we obtain a linear model that predicts how steering inputs ($\delta$) influence lateral displacement and heading, allowing for optimal lane-change trajectory generation.
 
+### Discretize the State-Space Matrices
+
 Since computers operate in discrete steps, we have to discrete these matrices (Fig. 7). The simplest method is Euler discretization.  
 
 <img width="585" height="412" alt="image" src="https://github.com/user-attachments/assets/1e3346ab-8773-473f-9422-4a5dcbb8478f" />  
@@ -258,8 +260,261 @@ $$ \begin{bmatrix} Y \\ \dot{y} \\ \psi \\ \dot{\psi} \end{bmatrix}_{k+1} = \beg
 \frac{2C_{\alpha f}l_f}{I} \Delta t 
 \end{bmatrix} \delta_k $$  
 
+#### Error in the discretized matrix  
+
+When Euler Discretization is used to transform your continuous-time differential equations into a discrete-time format, there is a specific type of error known as Truncation Error is introduced.   
+
+In continuous time, the vehicle's position $y$ follows a smooth curve (the "actual fn"). However, Euler discretization assumes the rate of change is constant over the time step $\Delta t$. (Fig. 8)  As a result, at each step, the predicted position (e.g., $y_{0.1}$) deviates from the true path.
+
+<img width="480" height="204" alt="image" src="https://github.com/user-attachments/assets/b5c25d71-6c28-41de-9c38-d8ad75ace129" />  
+Figure 8
+
+To tackle this error, the loop can be breaken into smaller pieces. Even if the main control loop runs at $10\text{ Hz}$ ($\Delta t = 0.1\text{ s}$), it can run the discretization at a much higher frequency (e.g., $100\text{ Hz}$ or $1\text{ kHz}$) within each control cycle - sub-stepping (inner loop). (Fig. 9)
+
+<img width="563" height="584" alt="image" src="https://github.com/user-attachments/assets/d8e6c133-ad08-447d-95a2-9222d64c0853" />  
+Figure 9  
+
+## MPC controller  
+
+In autonomous vehicle research, Model Predictive Control is generally categorized into three frameworks: Basic (Linear) MPC, Robust MPC, and Non-linear MPC. While Robust MPC handles model uncertainties and Non-linear MPC accounts for complex vehicle dynamics at the limits of handling, this project implements a Basic Linear MPC.  
+
+#### Assumptions and System Linearization  
+
+The selection of a Linear Time-Invariant (LTI) controller is justified by two fundamental assumptions regarding the lane-change maneuver:  
+
+1. Constant Longitudinal Velocity ($v_x$): We assume the vehicle maintains a steady forward speed throughout the maneuver. This removes the non-linear coupling between acceleration and steering, allowing us to focus solely on lateral dynamics.
+2. Small Angle Approximation: We assume the steering angle ($\delta$) and heading angle ($\psi$) remain small (typically $< 10^\circ$). Under these conditions, trigonometric functions linearize ($\sin \theta \approx \theta$, $\cos \theta \approx 1$, and $\tan \theta \approx \theta$), transforming the complex vehicle geometry into a linear state-space model.
+
+#### Why Basic MPC?  
+
+By satisfying these assumptions, the vehicle dynamics are reduced to an LTI system. A Basic MPC is preferred here because:  
+
+1. Computational Efficiency: It solves a Quadratic Programming (QP) problem at each step, which is significantly faster than non-linear optimization.
+2. Real-time Feasibility: It ensures the controller can operate at high frequencies (e.g., $10$–$100\text{ Hz}$) on embedded hardware.
+3. Predictive Accuracy: For standard highway lane changes, the LTI model provides sufficient fidelity to ensure smooth and safe trajectory tracking.
 
 
+#### Implementation of MPC controller
+
+The core of MPC is the ability to predict future states based on current measurements. Using the discretized matrices derived earlier, we define a Prediction Horizon ($N_p$).Starting from the current state $X_k$, we predict the future sequence:  
+
+Step 1: $X_{k+1} = A_d X_k + B_d U_k$  
+Step 2: $X_{k+2} = A_d X_{k+1} + B_d U_{k+1}$  
+General Form: $X_{k+i} = A_d^i X_k + \sum_{j=0}^{i-1} A_d^{i-1-j} B_d U_{k+j}$  
+
+By stacking these equations, the controller can evaluate an entire trajectory of steering angles ($\delta_k, \delta_{k+1}, \dots, \delta_{k+N}$) before the car even moves.  
+
+This general form can be written in the matrix form, which will be easier for the implementation.  
+
+The vector $\mathbf{X}$ represents the predicted future states, while $\mathbf{U}$ represents the sequence of future steering inputs calculated by the optimizer.
+
+
+$$\mathbf{X} = \begin{bmatrix} \mathbf{x}_1 \\ \mathbf{x}_2 \\ \vdots \\ \mathbf{x}_{N_p} \end{bmatrix}, \quad \mathbf{U} = \begin{bmatrix} \mathbf{u}_0 \\ \mathbf{u}_1 \\ \vdots \\ \mathbf{u}_{N_p-1} \end{bmatrix}$$
+
+
+$$
+\begin{bmatrix} 
+\mathbf{x}_1 \\ \mathbf{x}_2 \\ \mathbf{x}_3 \\ \vdots \\ \mathbf{x}_{N_p} 
+\end{bmatrix} = 
+\begin{bmatrix} 
+\mathbf{A}_d \\ \mathbf{A}_d^2 \\ \mathbf{A}_d^3 \\ \vdots \\ \mathbf{A}_d^{N_p} 
+\end{bmatrix} \mathbf{x}_0 + 
+\begin{bmatrix} 
+\mathbf{B}_d & \mathbf{0} & \dots & \mathbf{0} \\ 
+\mathbf{A}_d\mathbf{B}_d & \mathbf{B}_d & \dots & \mathbf{0} \\ 
+\mathbf{A}_d^2\mathbf{B}_d & \mathbf{A}_d\mathbf{B}_d & \dots & \mathbf{0} \\ 
+\vdots & \vdots & \ddots & \vdots \\ 
+\mathbf{A}_d^{N_p-1}\mathbf{B}_d & \mathbf{A}_d^{N_p-2}\mathbf{B}_d & \dots & \mathbf{B}_d 
+\end{bmatrix} 
+\begin{bmatrix} 
+\mathbf{u}_0 \\ \mathbf{u}_1 \\ \mathbf{u}_2 \\ \vdots \\ \mathbf{u}_{N_p-1} 
+\end{bmatrix}
+$$  
+
+where,  
+
+Prediction Vector ($\mathbf{X}$): A column vector of size $(4N_p \times 1)$, where each element $\mathbf{x}_i$ is the $4 \times 1$ state vector $[Y, \dot{y}, \psi, \dot{\psi}]^T$ at time step $i$.  
+
+Initial State Propagation ($\mathbf{M}\mathbf{x}_0$): This represents the Free Response. It shows where the vehicle would go based on its current momentum and orientation if no further steering inputs were applied.  
+
+Control Influence ($\mathbf{C}\mathbf{U}$): This represents the Forced Response. The lower-triangular Toeplitz structure of matrix $\mathbf{C}$ ensures causality—meaning a steering input at step $k$ can only affect states at step $k+1$ and beyond.  
+
+#### Formulating the cost function  
+
+$$J = \frac{1}{2} \vec{e}_{k+N}^{T} S \vec{e}_{k+N} + \frac{1}{2} \sum_{i=0}^{N-1} \left[ \vec{e}_{k+i}^{T} Q \vec{e}_{k+i} + \vec{\delta}_{k+i}^{T} R \vec{\delta}_{k+i} \right]$$  
+
+* Terminal Cost ($\frac{1}{2} e_{k+N}^{T} S e_{k+N}$): Penalizes the state error at the very end of the prediction horizon ($N$) to ensure long-term stability.
+* State Error ($\vec{e}_{k+i}$): The difference between the current state and the reference trajectory at time step $i$.
+* Control Input ($\vec{\delta}_{k+i}$): The steering angle command at time step $i$.
+* Weighting Matrices ($Q, R, S$):
+  * $Q$ (State Weighting): Determines how much to prioritize tracking accuracy.
+  * $R$ (Control Weighting): Determines the penalty for large steering inputs (actuation effort).
+  * $S$ (Terminal Weighting): Determines the penalty for the terminal cost
+
+#### Augmentation (adding a extra state)  
+
+Instead of optimising the absolute steering angle ($\delta$), the change in steering angle ($\Delta\delta$) can be optimised. This shift from optimizing ($\delta$) to ($\Delta\delta$) is a critical design choice for real-world autonomous systems. It transforms a standard tracking problem into a "smoothness-aware" control problem.
+
+##### Why $\Delta\delta$?  
+In our basic formulation, the controller minimizes the magnitude of the steering angle. However, the car doesn't just care how much it turns, but how fast it turns.  
+1. Aggressive Manoeuvres: If the cost function only penalizes $\delta$, the optimizer might command a sudden jump from $0^\circ$ to $10^\circ$ in a single time step to minimize tracking error.
+2. Physical Realism: Real steering actuators have a maximum "slew rate" (speed). By optimizing $\Delta\delta$, you directly control the jerk of the vehicle, ensuring passenger comfort and preventing tire saturation.
+
+##### Implementation challenge  
+
+There is a fundamental mismatch between what the optimizer calculates and what the vehicle needs:  
+* Optimizer Output: The MPC finds the sequence of optimal changes: $\Delta\delta_k$.
+* Plant Input: The vehicle physics (your state-space matrices) require the absolute angle: $\delta_k$.
+
+  To bridge this, we use the recursive relationship:
+  $$\delta_k = \delta_{k-1} + \Delta\delta_k$$
+
+  This means that to find the current steering angle, the controller must "remember" what the steering angle was at the previous time step ($k-1$).
+
+##### The Solution: State Vector Augmentation  
+
+Because the "previous steering angle" ($\delta_{k-1}$) is now required to predict future states, it can no longer be treated as a simple constant; it must become a state variable.  
+We augment the state vector $\mathbf{x}$ by adding $\delta$ as the 5th element:  
+
+$$\mathbf{x}_{aug} = \begin{bmatrix} Y \\ \dot{y} \\ \psi \\ \dot{\psi} \\ \delta \end{bmatrix}$$  
+
+##### Augmented System Dynamics  
+The new discrete-time state-space equation reflects that the new input is $\Delta\delta$:  
+
+$$\begin{bmatrix} Y \\ \dot{y} \\ \psi \\ \dot{\psi} \\ \delta \end{bmatrix}_{k+1} = \underbrace{\begin{bmatrix} \mathbf{A}_d & \mathbf{B}_d \\ \mathbf{0} & 1 \end{bmatrix}}_{\mathbf{A}_{aug}} \begin{bmatrix} Y \\ \dot{y} \\ \psi \\ \dot{\psi} \\ \delta \end{bmatrix}_k + \underbrace{\begin{bmatrix} \mathbf{0} \\ 1 \end{bmatrix}}_{\mathbf{B}_{aug}} \Delta\delta_k$$  
+
+#### Reformulating the cost function
+
+After substituting the error matrix and eliminating constant (bias) terms, we obtain:
+
+$$J' = \frac{1}{2} \mathbf{X}_G^T \bar{\mathbf{Q}} \mathbf{X}_G - \mathbf{r}_G^T \bar{\bar{\mathbf{T}}} \mathbf{r}_G + \frac{1}{2} \Delta\boldsymbol{\delta}_G^T \bar{\mathbf{R}} \Delta\boldsymbol{\delta}_G$$  
+
+where,
+
+* Augmented State Vector ($\tilde{\mathbf{X}}_G$)
+
+   This vector stacks the predicted states over the horizon $N=5$. Each sub-vector $\tilde{\mathbf{X}}_{k+i}$ contains 5 elements: lateral velocity, heading angle, yaw rate, lateral position, and the previous steering angle. 
+
+$$\tilde{\mathbf{X}}_G = \begin{bmatrix} \tilde{\mathbf{X}}_{k+1} \\ \tilde{\mathbf{X}}_{k+2} \\ \vdots \\ \tilde{\mathbf{X}}_{k+5} \end{bmatrix}, \quad \tilde{\mathbf{X}}_{k+i} = \begin{bmatrix} \dot{y}_i \\ \psi_i \\ \dot{\psi}_i \\ Y_i \\ \delta_{k-i} \end{bmatrix}$$  
+
+* Reference Vector ($\vec{r}_G$)
+
+   This vector contains the target heading ($\psi$) and lateral position ($Y$) for each step in the horizon.
+
+$$\vec{r}_G = \begin{bmatrix} \vec{r}_{k+1} \\ \vdots \\ \vec{r}_{k+5} \end{bmatrix}, \quad \vec{r}_{k+i} = \begin{bmatrix} \psi_i \\ Y_i \end{bmatrix}$$  
+
+* Control Rate Vector ($\Delta\vec{\delta}_G$)
+
+   The sequence of steering angle changes to be optimized by the controller.
+   
+$$\Delta\vec{\delta}_G = \begin{bmatrix} \Delta\delta_k \\ \Delta\delta_{k+1} \\ \Delta\delta_{k+2} \\ \Delta\delta_{k+3} \\ \Delta\delta_{k+4} \end{bmatrix}$$
+   
+* The State Weighting Matrix ($\bar{\bar{\mathbf{Q}}}$)
+  
+$$\bar{\bar{\mathbf{Q}}} = \begin{bmatrix} 
+\tilde{C}^T Q \tilde{C} & \mathbf{0} & \mathbf{0} & \mathbf{0} & \mathbf{0} \\ 
+\mathbf{0} & \tilde{C}^T Q \tilde{C} & \mathbf{0} & \mathbf{0} & \mathbf{0} \\ 
+\mathbf{0} & \mathbf{0} & \ddots & \mathbf{0} & \mathbf{0} \\ 
+\mathbf{0} & \mathbf{0} & \mathbf{0} & \tilde{C}^T Q \tilde{C} & \mathbf{0} \\ 
+\mathbf{0} & \mathbf{0} & \mathbf{0} & \mathbf{0} & \tilde{C}^T S \tilde{C} 
+\end{bmatrix}$$
+
+* The Cross-Weighting Matrix ($\bar{\bar{\mathbf{T}}}$)
+
+  
+$$\bar{\bar{\mathbf{T}}} = \begin{bmatrix} 
+Q \tilde{C} & \mathbf{0} & \mathbf{0} & \mathbf{0} & \mathbf{0} \\ 
+\mathbf{0} & Q \tilde{C} & \mathbf{0} & \mathbf{0} & \mathbf{0} \\ 
+\mathbf{0} & \mathbf{0} & Q \tilde{C} & \mathbf{0} & \mathbf{0} \\ 
+\mathbf{0} & \mathbf{0} & \mathbf{0} & Q \tilde{C} & \mathbf{0} \\ 
+\mathbf{0} & \mathbf{0} & \mathbf{0} & \mathbf{0} & S \tilde{C} 
+\end{bmatrix}$$
+
+* The Control Rate Weighting Matrix ($\bar{\bar{\mathbf{R}}}$)
+    
+
+$$\bar{\bar{\mathbf{R}}} = \begin{bmatrix} 
+R & 0 & 0 & 0 & 0 \\ 
+0 & R & 0 & 0 & 0 \\ 
+0 & 0 & R & 0 & 0 \\ 
+0 & 0 & 0 & R & 0 \\ 
+0 & 0 & 0 & 0 & R 
+\end{bmatrix}$$
+
+On further substituting the $\tilde{\mathbf{X}}_G$ from the augmented state-space matrix in this equation and eliminating the constant (bias) terms, we obtain:  
+
+$$J'' = \frac{1}{2} \Delta\vec{\delta}_G^T \bar{\bar{\mathbf{H}}} \Delta\vec{\delta}_G + \left[ \begin{matrix} \tilde{\mathbf{X}}_k^T & \vec{\mathbf{r}}_G^T \end{matrix} \right] \bar{\bar{\mathbf{F}}}^T \Delta\vec{\delta}_G$$  
+
+where,  
+
+The Hessian Matrix ($\bar{\bar{\mathbf{H}}}$)  
+
+$$\bar{\bar{\mathbf{H}}} = \bar{\bar{\mathbf{C}}}^T \bar{\bar{\mathbf{Q}}} \bar{\bar{\mathbf{C}}} + \bar{\bar{\mathbf{R}}}$$  
+
+The Gradient Component ($\bar{\bar{\mathbf{F}}}^T$)  
+
+$$\bar{\bar{\mathbf{F}}}^T = \begin{bmatrix} \hat{\hat{\mathbf{A}}}^T \bar{\bar{\mathbf{Q}}} \bar{\bar{\mathbf{C}}} \\ -\bar{\bar{\mathbf{T}}} \bar{\bar{\mathbf{C}}} \end{bmatrix}$$  
+
+#### Optimal input variables from the gradient of the cost function  
+
+On taking a derivative of the cost function, we obtain:  
+
+$$\nabla J'' = \bar{\bar{\mathbf{H}}} \Delta \vec{\delta}_G + \bar{\bar{\mathbf{F}}} \begin{bmatrix} \tilde{\mathbf{X}}_k \\ \vec{\mathbf{r}}_G \end{bmatrix}$$  
+
+The optimal control action is found by solving the gradient $\nabla J'' = 0$:  
+
+$\Delta \vec{\delta}_G = -\bar{\bar{H}}^{-1} \bar{\bar{F}} [\tilde{X}_k, \mathbf{r}_G]^T$  
+
+## Control Loop  
+
+After the MPC optimizer solves the gradient equation to find the optimal sequence of steering rate changes, $\Delta \vec{\delta}_G$, only the first element of this sequence is used to update the physical plant.  
+
+The process follows a Receding Horizon logic to bridge the gap between the optimizer's output and the plant's requirements.  
+
+1. Extracting the First Control Action
+
+$$\Delta \vec{\delta}_G = \begin{bmatrix} \Delta\delta_k \\ \Delta\delta_{k+1} \\ \vdots \\ \Delta\delta_{k+4} \end{bmatrix}$$  
+
+Even with a perfectly derived 5-step optimal sequence $\Delta \vec{\delta}_G$, we only ever execute the first command. This strategy is used because your internal model is only an approximation, and real-world factors will inevitably cause the vehicle to diverge from the predicted path.  
+
+Why we discard the future predictions:  
+
+* Model-Plant Mismatch: Your internal model uses Euler discretization, which creates a truncation error ($y_{0.1}$) compared to the "actual function".
+* Sensor Updates: At the next time step, real-time sensors provide a fresh estimate of the vehicle’s state ($Y, \psi$, etc.). This "ground truth" is almost always slightly different from what the MPC predicted $0.1\text{s}$ ago.
+* Disturbance Rejection: External factors like wind, tire slip, or road banking aren't in your $A_d$ matrix. By discarding the old plan and starting over, the MPC naturally "corrects" for these disturbances.
+
+The Control Cycle (Step-by-Step)  
+
+1.1 **Solve**: The optimizer calculates  
+
+$$\Delta \vec{\delta}_G = \begin{bmatrix} \Delta\delta_k \\ \Delta\delta_{k+1} \\ \Delta\delta_{k+2} \\ \Delta\delta_{k+3} \\ \Delta\delta_{k+4} \end{bmatrix}$$
+
+1.2 **Apply**: We take only $\Delta\delta_k$ and update the plant: $\delta_{new} = \delta_{prev} + \Delta\delta_k$.  
+1.3 **Discard**: The future predictions ($\Delta\delta_{k+1}$ to $\Delta\delta_{k+4}$) are thrown away.  
+1.4 **Sense & Shift**: At the next $10\text{ Hz}$ interval, we measure the actual state from sensors, shift the 5-step horizon forward by one step, and repeat the entire optimization.
+
+2. Integration into Absolute Steering Angle
+
+The vehicle plant (your state-space model) requires the absolute steering angle $\delta$ to perform the maneuver, not just the change. The new input for the plant is derived by integrating the previous state:  
+
+$$\delta_{k} = \delta_{k-1} + \Delta\delta_k$$  
+
+* $\delta_{k-1}$: This is the 5th element of your augmented state vector $\tilde{\mathbf{X}}_k$ from the previous step.
+* $\Delta\delta_k$: The optimized result from your current gradient calculation.
+
+3. Inner Loop Procedure (Sub-stepping)
+
+The main control loop runs at $10\text{ Hz}$. To tackle the discretization error where the discrete $y_{0.1}$ diverges from the continuous path, we implement an inner loop procedure:  
+
+** Macro-Step ($10\text{ Hz}$): The MPC solves the QP problem once every $0.1\text{s}$ to find $\Delta\delta_k$.  
+** Micro-Step (Inner Loop): The plant simulation "breaks into even smaller pieces" (e.g., $100\text{ Hz}$ or $1\text{ kHz}$).  
+** Application: During these smaller micro-steps, the derived $\delta_k$ is held constant or interpolated to drive the vehicle dynamics forward, ensuring the simulation follows the "actual fn" as closely as possible.  
+
+Following the Receding Horizon principle, only the first element $\Delta\delta_k$ is extracted from the optimized sequence. This value is added to the previous steering angle $\delta_{k-1}$ to form the absolute command sent to the vehicle plant. To minimize Euler discretization error, the plant state is updated using an inner-loop integration procedure at a frequency higher than the $10\text{ Hz}$ control rate.  
+
+
+<img width="502" height="474" alt="image" src="https://github.com/user-attachments/assets/550e62e2-c66c-4ec4-a2f5-5bef85aa431c" />  
+Figure 10  
 
 
 
