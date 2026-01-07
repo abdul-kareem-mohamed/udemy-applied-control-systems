@@ -222,6 +222,10 @@ To implement this model, the following parameters have to be defined:
 
 By substituting our vehicle parameters ($m, I, C_{\alpha}, l$), we obtain a linear model that predicts how steering inputs ($\delta$) influence lateral displacement and heading, allowing for optimal lane-change trajectory generation.
 
+Our state-space output matrix can be written as:
+
+$$\begin{bmatrix} \psi_k \\ Y_k \end{bmatrix} = \begin{bmatrix} 0 & 1 & 0 & 0 & 0 \\ 0 & 0 & 0 & 1 & 0 \end{bmatrix} \begin{bmatrix} \dot{y}_k \\ \psi_k \\ \dot{\psi}_k \\ Y_k \\ \delta_{k-1} \end{bmatrix}$$  
+
 ### Discretize the State-Space Matrices
 
 Since computers operate in discrete steps, we have to discrete these matrices (Fig. 7). The simplest method is Euler discretization.  
@@ -248,17 +252,9 @@ So, with the new $\mathbf{A}_d$ and $\mathbf{B}_d$ matrices, where,
 
 our state-space matrix is rewritten as follows:  
 
-$$ \begin{bmatrix} Y \\ \dot{y} \\ \psi \\ \dot{\psi} \end{bmatrix}_{k+1} = \begin{bmatrix} 
-1 & \Delta t & v_x \Delta t & 0 \\ 
-0 & 1 - \frac{2C_{\alpha f} + 2C_{\alpha r}}{m v_x} \Delta t & 0 & -\left(v_x + \frac{2C_{\alpha f}l_f - 2C_{\alpha r}l_r}{m v_x}\right) \Delta t \\ 
-0 & 0 & 1 & \Delta t \\ 
-0 & -\frac{2C_{\alpha f}l_f - 2C_{\alpha r}l_r}{I v_x} \Delta t & 0 & 1 - \frac{2C_{\alpha f}l_f^2 + 2C_{\alpha r}l_r^2}{I v_x} \Delta t 
-\end{bmatrix} \begin{bmatrix} Y \\ \dot{y} \\ \psi \\ \dot{\psi} \end{bmatrix}_k + \begin{bmatrix} 
-0 \\ 
-\frac{2C_{\alpha f}}{m} \Delta t \\ 
-0 \\ 
-\frac{2C_{\alpha f}l_f}{I} \Delta t 
-\end{bmatrix} \delta_k $$  
+The system utilizes a $2 \times 4$ output matrix $C$ to extract the tracking variables (lateral position and heading) from the physical state vector. This matrix serves as the basis for the augmented $2 \times 5$ matrix used in the final control loop to ensure mathematical compatibility with the steering-rate optimization.  
+
+$$\mathbf{C}_{aug} = \begin{bmatrix} \mathbf{C} & \begin{matrix} 0 \\ 0 \end{matrix} \end{bmatrix} = \begin{bmatrix} 1 & 0 & 0 & 0 & 0 \\ 0 & 0 & 1 & 0 & 0 \end{bmatrix}$$
 
 #### Error in the discretized matrix  
 
