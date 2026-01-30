@@ -15,4 +15,11 @@ The mathematical model of a water tank was created using python. Then, a P-contr
 
 The mathematical model was derived and modelled in python. The train is controlled using a PID controller to catch a block falling out in random in space.
 
-![Recording+2025-12-26+083333](https://github.com/user-attachments/assets/6d767d1a-a393-430d-8ee4-be747e0507f7)
+![Recording+2025-12-26+083333](https://github.com/user-attachments/assets/6d767d1a-a393-430d-8ee4-be747e0507f7)  
+
+### Dynamics and Control of autonomous lane change  
+
+A comprehensive framework for modeling vehicle dynamics and implementing control algorithms (MPC/PID) to execute safe autonomous lane changes.  
+
+https://github.com/user-attachments/assets/61e385ae-f08d-44b3-bf9c-94c4ae9f7b83
+
