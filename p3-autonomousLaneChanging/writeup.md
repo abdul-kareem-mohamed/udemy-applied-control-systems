@@ -158,11 +158,15 @@ In order to implement the MPC controller, we need to organize the derived differ
    Based on our derivation, we track the lateral position, lateral velocity, heading angle, and yaw rate. These are our relevant states. 
    * State Vector ($x$):
 
-$x = \begin{bmatrix} Y \\ \dot{y} \\ \psi \\ \dot{\psi} \end{bmatrix}$
+$x = \begin{bmatrix} Y \\ \dot{y} \\ \psi \\ \dot{\psi} \end{bmatrix}$  
+
+
      
    * Input Vector ($u$):
 
-$u = \delta$ (Steering angle)
+$u = \delta$ (Steering angle)  
+
+
  
 
 2. The State-Space Matrices
