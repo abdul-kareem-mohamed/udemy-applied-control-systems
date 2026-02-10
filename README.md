@@ -16,7 +16,6 @@ The mathematical model of a water tank was created using python. Then, a P-contr
 The mathematical model was derived and modelled in python. The train is controlled using a PID controller to catch a block falling out in random in space.
 
 
-
 https://github.com/user-attachments/assets/224d8654-fcf2-49a4-858e-89b8cc95dc86
 
 
