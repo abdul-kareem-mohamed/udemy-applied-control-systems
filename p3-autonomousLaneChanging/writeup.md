@@ -522,6 +522,7 @@ Following the Receding Horizon principle, only the first element $\Delta\delta_k
 
 
 <img width="502" height="474" alt="image" src="https://github.com/user-attachments/assets/550e62e2-c66c-4ec4-a2f5-5bef85aa431c" />  
+
 Figure 10  
 
 
