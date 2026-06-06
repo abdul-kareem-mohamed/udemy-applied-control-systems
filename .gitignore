@@ -1,0 +1,87 @@
+# Build directories
+build/
+build-*/
+cmake-build-*/
+
+# CMake generated files
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+CTestTestfile.cmake
+Testing/
+
+# Generated build system files
+Makefile
+*.ninja
+.ninja_deps
+.ninja_log
+build.ninja
+
+# Visual Studio
+.vs/
+*.vcxproj*
+*.sln
+*.user
+
+# CLion
+.idea/
+
+# VS Code
+.vscode/
+
+# Xcode
+*.xcodeproj/
+*.xcworkspace/
+
+# Object files
+*.o
+*.obj
+*.lo
+*.slo
+
+# Static libraries
+*.a
+*.lib
+
+# Shared libraries
+*.so
+*.so.*
+*.dylib
+*.dll
+
+# Executables
+*.exe
+*.out
+*.app
+
+# Debug symbols
+*.pdb
+*.dSYM/
+
+# Coverage files
+*.gcda
+*.gcno
+*.gcov
+coverage/
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.swp
+*~
+
+# Cache
+.cache/
+.clangd/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+.pytest_cache/
