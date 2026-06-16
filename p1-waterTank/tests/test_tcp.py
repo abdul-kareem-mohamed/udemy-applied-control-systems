@@ -11,7 +11,7 @@ PORT_CTRL = 5000
 TIMEOUT = 2
 
 # Path to the controller relative to project root
-CONTROLLER_PATH = "p1-waterTank/src/p1-waterTank/controller.py"
+CONTROLLER_PATH = "src/p1-waterTank/controller.py"
 
 @pytest.fixture(scope="module")
 def controller_process():
@@ -62,8 +62,8 @@ def test_json_protocol(controller_process):
         resp = json.loads(data.strip())
         
         assert "m_dot" in resp
-        # (10.0 - 5.0) * 0.5 = 2.5
-        assert resp["m_dot"] == 2.5
+        # (10.0 - 5.0) * 1000.0 = 5000.0
+        assert resp["m_dot"] == 5000.0
 
 def test_multi_packet_buffer(controller_process):
     """Test that the server handles multiple JSON messages in one stream."""
@@ -86,8 +86,8 @@ def test_multi_packet_buffer(controller_process):
         resp1 = json.loads(lines[0])
         resp2 = json.loads(lines[1])
         
-        assert resp1["m_dot"] == 4.0 # (10-2)*0.5
-        assert resp2["m_dot"] == 1.0 # (10-8)*0.5
+        assert resp1["m_dot"] == 8000.0 # (10-2)*1000
+        assert resp2["m_dot"] == 2000.0 # (10-8)*1000
 
 def test_malformed_json_resilience(controller_process):
     """Ensure the server survives malformed data and responds to the next valid one."""
@@ -101,4 +101,4 @@ def test_malformed_json_resilience(controller_process):
         
         data = s.recv(1024).decode()
         resp = json.loads(data.strip())
-        assert resp["m_dot"] == 5.0
+        assert resp["m_dot"] == 10000.0 # (10-0)*1000
