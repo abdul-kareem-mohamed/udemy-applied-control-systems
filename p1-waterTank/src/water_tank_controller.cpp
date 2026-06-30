@@ -72,8 +72,6 @@ int main() {
 
   spdlog::info("Controller running...");
 
-  auto start_time = std::chrono::steady_clock::now();
-
   while (keep_running) {
     // Accept connection
     sockaddr_in client_addr;
@@ -115,13 +113,10 @@ int main() {
         try {
           json msg = json::parse(line);
 
+          double t = msg.value("t", 0.0);
           double target = msg.value("target", 1.0);
           double volume = msg.value("volume", 0.0);
           double m_dot = PID_Controller(volume, target);
-
-          auto current_time = std::chrono::steady_clock::now();
-          std::chrono::duration<double> elapsed_sec = current_time - start_time;
-          double t = elapsed_sec.count();
 
           json reply;
           reply["t"] = t;

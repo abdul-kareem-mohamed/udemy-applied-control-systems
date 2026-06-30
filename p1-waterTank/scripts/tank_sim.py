@@ -4,8 +4,11 @@ import select
 import socket
 import time
 
+from logging_config import setup_logging
+
+setup_logging()
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.DEBUG)
+
 
 HOST_CTRL = "127.0.0.1"
 PORT_CTRL = 5000
@@ -102,7 +105,6 @@ def process_controller_data():
 
   
 t = 0.0
-dt = 0.04
 density = 1000
 volume = 0.0
 target_level = 100
@@ -110,27 +112,35 @@ m_dot = 0.0
 
 connect_to_controller()
 create_ui_server()
+start_time = time.time()
+last_time = start_time
 
 while True:
-
+  dt = time.time() - start_time
+  
   if not process_controller_data():
     logger.info("Reconnecting to controller ...")
     connect_to_controller()
-    
+    start_time = time.time() - (last_time - start_time) 
+    last_time = time.time()
   
+  current_time = time.time()
+  dt = current_time - last_time
+  last_time = current_time
+  t = current_time - start_time
+
   # volume_1[i] = volume_1[i-1] + (m_dot1[i] + m_dot1[i-1]) / (2 * density) * dt
   volume += (m_dot / density) * dt
-  t += dt
-
   
   # ---- send to controller ----
-  ctrl_server.send((json.dumps({
+  reply = {
       "t": t,
       "volume": volume,
       "target": target_level
-  }) + "\n").encode())
+  }
+  ctrl_server.send((json.dumps(reply) + "\n").encode())
   
-  logger.debug("t: %.2f, volume: %.6f, m_dot: %.2f", t, volume, m_dot)
+  logger.debug(f"Data Sent: {reply}")
 
   # ---- send to visualizer ----
   check_ui_connection()

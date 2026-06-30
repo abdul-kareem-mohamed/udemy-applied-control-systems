@@ -7,9 +7,11 @@ import time
 import matplotlib.animation as animation
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
+from logging_config import setup_logging
 
+setup_logging()
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.DEBUG)
+
 
 HOST_UI = "127.0.0.1"
 PORT_UI = 5001

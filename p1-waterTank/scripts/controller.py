@@ -3,11 +3,14 @@ import logging
 import socket
 import time
 
+from logging_config import setup_logging
+
+setup_logging()
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.DEBUG)
 
 HOST_CTRL = "127.0.0.1"
 PORT_CTRL = 5000
+
 
 
 class PIDController:
@@ -35,7 +38,6 @@ try:
         ctrl_conn, addr = ctrl_server.accept()
         with ctrl_conn:
             buffer = ""
-            start_time = time.time()
             
             while True:
                 try:
@@ -49,7 +51,7 @@ try:
                         line, buffer = buffer.split("\n", 1)
                         try:
                             msg = json.loads(line)
-                            t = time.time() - start_time
+                            t = msg.get("t", 0.0)
                             target = msg.get("target", 1.0)
                             volume = msg.get("volume", 0.0)
                             m_dot = ctrl.compute(msg.get("target", 1.0), msg.get("volume", 0.0))

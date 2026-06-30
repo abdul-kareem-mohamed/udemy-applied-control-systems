@@ -5,12 +5,11 @@ import subprocess
 import sys
 from pathlib import Path
 
-logging.basicConfig(
-    level=logging.DEBUG,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    datefmt="%H:%M:%S"
-)
+from logging_config import setup_logging
+
+setup_logging()
 logger = logging.getLogger(__name__)
+
 
 def main():
   parser = argparse.ArgumentParser(description="Water Tank Launcher")
