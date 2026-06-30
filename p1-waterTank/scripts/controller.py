@@ -1,6 +1,7 @@
 import json
 import logging
 import socket
+import time
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG)
@@ -34,6 +35,8 @@ try:
         ctrl_conn, addr = ctrl_server.accept()
         with ctrl_conn:
             buffer = ""
+            start_time = time.time()
+            
             while True:
                 try:
                     data = ctrl_conn.recv(1024).decode()
@@ -46,9 +49,19 @@ try:
                         line, buffer = buffer.split("\n", 1)
                         try:
                             msg = json.loads(line)
+                            t = time.time() - start_time
+                            target = msg.get("target", 1.0)
+                            volume = msg.get("volume", 0.0)
                             m_dot = ctrl.compute(msg.get("target", 1.0), msg.get("volume", 0.0))
-                            ctrl_conn.send((json.dumps({"m_dot": m_dot}) + "\n").encode())
-                            logger.debug("Sent: m_dot: %.2f", m_dot)
+
+                            reply = {
+                                "t": t,
+                                "volume": volume,
+                                "m_dot": m_dot,
+                                "target": target
+                                }
+                            ctrl_conn.send((json.dumps(reply) + "\n").encode())
+                            logger.debug(f"Sent Data: {reply}")
                             
                         except json.JSONDecodeError:
                             logger.error(f"Invalid JSON: {line}")

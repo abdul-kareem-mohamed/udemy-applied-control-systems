@@ -61,9 +61,9 @@ def get_tank_data():
         line, buffer = buffer.split("\n", 1)
         try:
           msg = json.loads(line)
-          t_vals.append(msg["t"])
-          v_vals.append(msg["volume"])
-          m_vals.append(msg["m_dot"])
+          t_vals.append(msg.get("t", 0.0))
+          v_vals.append(msg.get("volume", 0.0))
+          m_vals.append(msg.get("m_dot", 0.0))         # <--- Changed to safely default to 0.0
           target_vals.append(msg.get("target", 0.0))
         except json.JSONDecodeError:
           logger.warning("Failed to parse JSON: %s", line)
@@ -104,7 +104,8 @@ plt.ylabel('Volume [m^3]')
 plt.title('System Timeline Response')
 plt.grid(True)
 plt.legend(loc='lower right')
-
+ax_graph.set_ylim(0, 120)
+ax_graph.set_xlim(0, 10)
 
 def update(frame_index):
   global t_vals, v_vals, m_vals, target_vals

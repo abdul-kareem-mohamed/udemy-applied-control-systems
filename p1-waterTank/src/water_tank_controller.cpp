@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <string>
 #include <csignal>
+#include <chrono>
 
 #include "pid_controller.hpp"
 #include <spdlog/spdlog.h>
@@ -71,6 +72,8 @@ int main() {
 
   spdlog::info("Controller running...");
 
+  auto start_time = std::chrono::steady_clock::now();
+
   while (keep_running) {
     // Accept connection
     sockaddr_in client_addr;
@@ -114,16 +117,22 @@ int main() {
 
           double target = msg.value("target", 1.0);
           double volume = msg.value("volume", 0.0);
-          
           double m_dot = PID_Controller(volume, target);
 
+          auto current_time = std::chrono::steady_clock::now();
+          std::chrono::duration<double> elapsed_sec = current_time - start_time;
+          double t = elapsed_sec.count();
+
           json reply;
+          reply["t"] = t;
+          reply["volume"] = volume;
           reply["m_dot"] = m_dot;
+          reply["target"] = target;
           std::string reply_str = reply.dump() + "\n";
 
           send(client_fd, reply_str.c_str(), reply_str.length(), 0);
 
-          spdlog::debug("Sent: m_dot: {:.2f}", m_dot);
+          spdlog::debug("Sent: m_dot: {}", line);
 
         } catch (const json::exception& e) {
           spdlog::error("Invalid JSON: {}", line); 
